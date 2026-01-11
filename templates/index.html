@@ -1,0 +1,2198 @@
+<!DOCTYPE html>
+<html lang="en" x-data="expenseTracker()" x-init="init()">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        .notification { transition: transform 0.3s; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-500 via-cyan-500 to-teal-500 min-h-screen p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="text-center text-white mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <div></div> <!-- Spacer -->
+                <div>
+                    <h1 class="text-4xl md:text-5xl font-bold mb-2 drop-shadow-lg">💰 Expense Tracker</h1>
+                    <p class="text-lg md:text-xl opacity-90">Track your expenses and export them anytime</p>
+                </div>
+                <div>
+                    <a href="/logout" 
+                        class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
+                        Logout
+                    </a>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <div class="bg-white rounded-xl shadow-lg mb-6 p-2 flex gap-2 overflow-x-auto">
+            <button @click="switchToTab('expenses')" 
+                class="px-6 py-3 rounded-lg font-semibold transition whitespace-nowrap"
+                :class="activeTab === 'expenses' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'">
+                📝 Expenses
+            </button>
+            <button @click="switchToTab('budget')" 
+                class="px-6 py-3 rounded-lg font-semibold transition whitespace-nowrap"
+                :class="activeTab === 'budget' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'">
+                💰 Budget
+            </button>
+            <button @click="switchToTab('summary')" 
+                class="px-6 py-3 rounded-lg font-semibold transition whitespace-nowrap"
+                :class="activeTab === 'summary' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'">
+                📊 Summary
+            </button>
+            <button @click="switchToChartsTab()" 
+                class="px-6 py-3 rounded-lg font-semibold transition whitespace-nowrap"
+                :class="activeTab === 'charts' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'">
+                📈 Charts
+            </button>
+            <button @click="switchToTab('insights')" 
+                class="px-6 py-3 rounded-lg font-semibold transition whitespace-nowrap"
+                :class="activeTab === 'insights' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'">
+                💡 Insights
+            </button>
+        </div>
+
+        <!-- Expenses Tab -->
+        <div x-show="activeTab === 'expenses'" x-cloak>
+            <div class="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Totals Card - Always Visible -->
+            <section class="bg-white rounded-xl shadow-xl p-4 lg:col-span-1 lg:sticky lg:top-4 h-fit">
+                <h2 class="text-xl font-bold text-purple-600 mb-4">Summary</h2>
+                
+                <template x-if="loading">
+                    <div class="text-center py-4 text-gray-500 text-sm">Loading...</div>
+                </template>
+                
+                <template x-if="!loading && filteredExpenses.length > 0">
+                    <div class="space-y-3">
+                        <!-- Quick Totals -->
+                        <div class="space-y-2">
+                            <div class="bg-gradient-to-r from-green-500 to-green-600 text-white p-2 rounded-lg text-center text-xs font-semibold">
+                                Chequing: $<span x-text="chequingTotal.toFixed(2)"></span>
+                            </div>
+                            <div class="bg-gradient-to-r from-purple-600 to-purple-800 text-white p-2 rounded-lg text-center text-xs font-semibold">
+                                Credit Card: $<span x-text="creditCardTotal.toFixed(2)"></span>
+                            </div>
+                            <div class="bg-gradient-to-r from-gray-700 to-gray-900 text-white p-2 rounded-lg text-center text-xs font-bold">
+                                Expenses: $<span x-text="grandTotal.toFixed(2)"></span>
+                            </div>
+                            <template x-if="incomeTotal > 0">
+                                <div class="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-2 rounded-lg text-center text-xs font-semibold">
+                                    Income: $<span x-text="incomeTotal.toFixed(2)"></span>
+                                </div>
+                            </template>
+                            <template x-if="investmentTotal !== 0">
+                                <div class="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-2 rounded-lg text-center text-xs font-semibold">
+                                    Investment: $<span x-text="investmentTotal.toFixed(2)"></span>
+                                </div>
+                            </template>
+                            <template x-if="incomeTotal > 0 || investmentTotal !== 0">
+                                <div class="bg-gradient-to-r from-teal-600 to-teal-800 text-white p-2 rounded-lg text-center text-xs font-bold">
+                                    Net: $<span x-text="netTotal.toFixed(2)"></span>
+                                </div>
+                            </template>
+                        </div>
+                        
+                        <!-- Budget Progress -->
+                        <div class="pt-3 border-t space-y-2">
+                            <div class="text-xs font-semibold text-gray-700 mb-2">Budget Progress</div>
+                            
+                            <!-- Fixed Bills + Loans -->
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-gray-600">Bills/Loans</span>
+                                    <span class="font-semibold"
+                                        :class="fixedBillsLoansSpent > budgetLimits.fixedBillsLoans ? 'text-red-600' : 'text-gray-700'">
+                                        $<span x-text="fixedBillsLoansSpent.toFixed(0)"></span>/$<span x-text="budgetLimits.fixedBillsLoans.toFixed(0)"></span>
+                                    </span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-1.5">
+                                    <div class="h-1.5 rounded-full transition-all"
+                                        :class="fixedBillsLoansSpent > budgetLimits.fixedBillsLoans ? 'bg-red-500' : 'bg-green-500'"
+                                        :style="`width: ${Math.min(100, (fixedBillsLoansSpent / budgetLimits.fixedBillsLoans) * 100)}%`">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Variable Spending -->
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-gray-600">Variable</span>
+                                    <span class="font-semibold"
+                                        :class="variableSpendingSpent > budgetLimits.variableSpending ? 'text-red-600' : 'text-gray-700'">
+                                        $<span x-text="variableSpendingSpent.toFixed(0)"></span>/$<span x-text="budgetLimits.variableSpending.toFixed(0)"></span>
+                                    </span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-1.5">
+                                    <div class="h-1.5 rounded-full transition-all"
+                                        :class="variableSpendingSpent > budgetLimits.variableSpending ? 'bg-red-500' : 'bg-yellow-500'"
+                                        :style="`width: ${Math.min(100, (variableSpendingSpent / budgetLimits.variableSpending) * 100)}%`">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Investing -->
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-gray-600">Investing</span>
+                                    <span class="font-semibold"
+                                        :class="investingProgress.inRange ? 'text-green-600' : (investingProgress.aboveMax ? 'text-red-600' : 'text-yellow-600')">
+                                        $<span x-text="investmentTotal.toFixed(0)"></span>/$<span x-text="budgetLimits.investingMin.toFixed(0)"></span>–$<span x-text="budgetLimits.investingMax.toFixed(0)"></span>
+                                    </span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-1.5">
+                                    <div class="h-1.5 rounded-full transition-all"
+                                        :class="investingProgress.inRange ? 'bg-green-500' : (investingProgress.aboveMax ? 'bg-red-500' : 'bg-yellow-500')"
+                                        :style="`width: ${Math.min(100, (investmentTotal / budgetLimits.investingMax) * 100)}%`">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Remaining Buffer -->
+                            <div class="pt-2 border-t mt-2">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs font-semibold text-gray-700">Remaining</span>
+                                    <span class="text-sm font-bold"
+                                        :class="remainingBuffer >= 0 ? 'text-green-600' : 'text-red-600'">
+                                        $<span x-text="remainingBuffer.toFixed(2)"></span>
+                                    </span>
+                                </div>
+                                <p class="text-xs text-gray-500 mt-0.5">Target: ~$1,600</p>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+                
+                <template x-if="!loading && filteredExpenses.length === 0">
+                    <div class="text-center py-4 text-gray-500 text-sm" x-text="emptyMessage"></div>
+                </template>
+            </section>
+            
+            <!-- Expense Form -->
+            <section class="bg-white rounded-xl shadow-xl p-6 h-fit lg:col-span-1 xl:col-span-1 lg:sticky lg:top-4">
+                <h2 class="text-2xl font-bold text-purple-600 mb-6" x-text="editingExpense ? 'Edit Expense' : 'Add New Expense'"></h2>
+                
+                <form @submit.prevent="submitExpense()" class="space-y-4">
+                    <input type="hidden" x-model="formData.id">
+                    
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Date</label>
+                        <input type="date" x-model="formData.date" required
+                            class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                        <select x-model="formData.category" @change="onCategoryChange()" required
+                            class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none">
+                            <option value="">Select a category</option>
+                            <option value="Groceries">Groceries</option>
+                            <option value="Fast Food">Fast Food</option>
+                            <option value="Restaurant">Restaurant</option>
+                            <option value="Coffee">Coffee</option>
+                            <option value="Transportation">Transportation</option>
+                            <option value="Shopping">Shopping</option>
+                            <option value="Entertainment">Entertainment</option>
+                            <option value="Healthcare">Healthcare</option>
+                            <option value="Education">Education</option>
+                            <option value="Travel">Travel</option>
+                            <option value="Personal Care">Personal Care</option>
+                            <option value="Pet">Pet</option>
+                            <option value="Subscription">Subscription</option>
+                            <option value="Bills">Bills</option>
+                            <option value="Loans">Loans</option>
+                            <option value="Payment">Payment</option>
+                            <option value="Income">Income</option>
+                            <option value="Investment">Investment</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Subcategory field - shown for categories that support subcategories -->
+                    <div x-show="categoriesWithSubcategories.includes(formData.category)" x-cloak>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">
+                            Subcategory <span class="text-gray-500 text-xs">(optional)</span>
+                        </label>
+                        <input type="text" x-model="formData.subcategory" 
+                            placeholder="e.g., Veggies, Meat, Dairy..."
+                            class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none"
+                            @input="updateSubcategorySuggestions()">
+                        <!-- Subcategory suggestions dropdown -->
+                        <div x-show="subcategorySuggestions.length > 0 && formData.subcategory" 
+                            class="mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto z-10">
+                            <template x-for="suggestion in subcategorySuggestions" :key="suggestion">
+                                <button type="button" 
+                                    @click="formData.subcategory = suggestion; subcategorySuggestions = []"
+                                    class="w-full text-left px-4 py-2 hover:bg-purple-50 text-sm text-gray-700">
+                                    <span x-text="suggestion"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                        <input type="text" x-model="formData.description" placeholder="Enter expense description" required
+                            class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Amount</label>
+                        <input type="number" x-model="formData.amount" step="0.01" min="0" placeholder="0.00" required
+                            class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none">
+                    </div>
+                    
+                    <div x-show="formData.category === 'Subscription'" x-cloak>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" x-model="formData.isBill"
+                                class="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                            <span class="text-sm text-gray-700">This subscription is a bill (comes from chequing account)</span>
+                        </label>
+                    </div>
+                    
+                    <div>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" x-model="formData.isRecurring"
+                                class="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                            <span class="text-sm text-gray-700">🔄 Mark as recurring (auto-generate monthly)</span>
+                        </label>
+                    </div>
+                    
+                    <div class="flex gap-3 pt-2">
+                        <button type="submit" 
+                            class="flex-1 bg-gradient-to-r from-purple-600 to-purple-800 text-white py-2 px-4 rounded-lg font-semibold hover:from-purple-700 hover:to-purple-900 transition transform hover:-translate-y-0.5 shadow-lg"
+                            x-text="editingExpense ? 'Update Expense' : 'Add Expense'">
+                        </button>
+                        <button type="button" x-show="editingExpense" @click="cancelEdit()" x-cloak
+                            class="bg-gray-500 text-white py-2 px-4 rounded-lg font-semibold hover:bg-gray-600 transition">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Expenses List -->
+            <section class="bg-white rounded-xl shadow-xl p-6 flex flex-col h-[calc(100vh-8rem)] xl:h-[calc(100vh-12rem)] lg:col-span-1 xl:col-span-2">
+                <div class="flex justify-between items-center mb-4 flex-shrink-0">
+                    <h2 class="text-2xl font-bold text-purple-600">Your Expenses</h2>
+                    <div class="flex gap-2 flex-wrap">
+                        <button @click="generateRecurringExpenses()" 
+                            class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-700 transition"
+                            title="Generate recurring expenses for this month">
+                            🔄 Generate Recurring
+                        </button>
+                        <button @click="showEmailModal = true" 
+                            class="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-purple-700 transition"
+                            title="Send weekly budget report via email">
+                            📧 Email Report
+                        </button>
+                        <button @click="exportData('csv')" 
+                            class="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-green-700 transition">
+                            CSV
+                        </button>
+                        <button @click="exportData('excel')" 
+                            class="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-green-700 transition">
+                            Excel
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Month Navigation -->
+                <div class="flex items-center justify-center gap-2 mb-4 p-3 bg-gray-50 rounded-lg flex-wrap flex-shrink-0">
+                    <button @click="previousMonth()" 
+                        class="w-8 h-8 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition font-bold text-lg">
+                        ‹
+                    </button>
+                    <div class="flex items-center gap-2">
+                        <input type="month" x-model="selectedMonth" @change="editingBudget = false; loadExpenses()" class="hidden" id="monthInput" x-ref="monthInput">
+                        <span class="text-base font-semibold text-gray-800" x-text="monthDisplay"></span>
+                        <button @click="$refs.monthInput.click()" 
+                            class="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600 transition">
+                            📅
+                        </button>
+                    </div>
+                    <button @click="nextMonth()" 
+                        class="w-8 h-8 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition font-bold text-lg">
+                        ›
+                    </button>
+                    <button @click="goToCurrentMonth()" 
+                        class="bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-semibold hover:bg-green-700 transition">
+                        Today
+                    </button>
+                </div>
+                
+                <!-- Search and Filter -->
+                <div class="mb-4 space-y-2 flex-shrink-0">
+                    <div class="relative">
+                        <input type="text" x-model="searchQuery" placeholder="Search expenses..."
+                            class="w-full px-3 py-1.5 pl-8 text-sm border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none">
+                        <span class="absolute left-2 top-2 text-gray-400 text-sm">🔍</span>
+                        <button x-show="searchQuery" @click="searchQuery = ''" x-cloak
+                            class="absolute right-2 top-1.5 text-gray-400 hover:text-gray-600 text-sm">
+                            ✕
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs font-semibold text-gray-700 whitespace-nowrap">Category:</label>
+                        <select x-model="selectedCategoryFilter"
+                            class="flex-1 px-3 py-1.5 text-sm border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none">
+                            <option value="">All</option>
+                            <template x-for="category in availableCategories" :key="category">
+                                <option :value="category" x-text="category"></option>
+                            </template>
+                        </select>
+                        <button x-show="selectedCategoryFilter" @click="selectedCategoryFilter = ''" x-cloak
+                            class="bg-gray-500 text-white px-2 py-1 rounded text-xs font-semibold hover:bg-gray-600 transition">
+                            ✕
+                        </button>
+                    </div>
+                    <div x-show="searchQuery || selectedCategoryFilter" x-cloak class="text-xs text-gray-600">
+                        Showing <span class="font-semibold" x-text="filteredExpenses.length"></span> of 
+                        <span class="font-semibold" x-text="allExpenses.length"></span>
+                    </div>
+                </div>
+                
+                <!-- Expenses List -->
+                <div class="space-y-2 overflow-y-auto flex-1 min-h-0" x-ref="expensesList">
+                    <template x-if="loading">
+                        <div class="text-center py-8 text-gray-500">Loading expenses...</div>
+                    </template>
+                    
+                    <template x-if="!loading && filteredExpenses.length === 0">
+                        <div class="text-center py-8 text-gray-500" x-text="emptyMessage"></div>
+                    </template>
+                    
+                    <template x-for="expense in filteredExpenses" :key="expense.id">
+                        <div class="flex justify-between items-start p-3 bg-gray-50 rounded-lg border-l-4 hover:bg-gray-100 transition"
+                            :class="{
+                                'border-red-500': expense.category === 'Payment',
+                                'border-blue-500': expense.category === 'Income',
+                                'border-indigo-500': expense.category === 'Investment',
+                                'border-purple-500': expense.category === 'Subscription' && !expense.is_active,
+                                'border-purple-600': expense.category !== 'Payment' && expense.category !== 'Subscription' && expense.category !== 'Income' && expense.category !== 'Investment'
+                            }"
+                            :style="expense.category === 'Subscription' && !expense.is_active ? 'opacity: 0.6;' : ''">
+                            <div class="flex-1 min-w-0 pr-2">
+                                <div class="flex justify-between items-center mb-1 flex-wrap gap-1">
+                                    <span class="inline-flex items-center gap-1.5 flex-wrap">
+                                        <span class="px-2 py-0.5 rounded-full text-xs font-semibold text-white"
+                                            :class="{
+                                                'bg-blue-600': expense.category === 'Income',
+                                                'bg-indigo-600': expense.category === 'Investment',
+                                                'bg-red-600': expense.category === 'Payment',
+                                                'bg-purple-600': expense.category !== 'Income' && expense.category !== 'Investment' && expense.category !== 'Payment'
+                                            }"
+                                            x-text="expense.category"></span>
+                                        <span x-show="expense.subcategory" x-cloak 
+                                            class="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium"
+                                            x-text="expense.subcategory"></span>
+                                        <span x-show="expense.is_recurring" x-cloak 
+                                            class="text-sm" title="Monthly Recurring">🔄</span>
+                                        <span x-show="expense.category === 'Subscription' && !expense.is_active" x-cloak
+                                            class="bg-gray-500 text-white px-1.5 py-0.5 rounded text-xs font-semibold">❌</span>
+                                    </span>
+                                    <span class="text-lg font-bold whitespace-nowrap"
+                                        :class="{
+                                            'text-red-600': expense.category === 'Payment',
+                                            'text-blue-600': expense.category === 'Income',
+                                            'text-indigo-600': expense.category === 'Investment',
+                                            'text-green-600': expense.category !== 'Payment' && expense.category !== 'Income' && expense.category !== 'Investment'
+                                        }"
+                                        x-text="(expense.category === 'Payment' ? '-' : '') + '$' + parseFloat(expense.amount).toFixed(2)">
+                                    </span>
+                                </div>
+                                <div class="text-sm text-gray-700 mb-1 truncate" x-text="expense.description" :title="expense.description"></div>
+                                <div class="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                                    <span x-text="expense.date"></span>
+                                    <button x-show="expense.category === 'Subscription' && expense.is_active" x-cloak
+                                        @click="cancelSubscription(expense.id)"
+                                        class="bg-yellow-500 text-white px-1.5 py-0.5 rounded text-xs hover:bg-yellow-600 transition">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="flex gap-1.5 flex-shrink-0">
+                                <button @click="editExpense(expense)" 
+                                    class="w-7 h-7 bg-yellow-500 text-gray-800 rounded-full hover:bg-yellow-600 transition font-bold text-sm">
+                                    ✎
+                                </button>
+                                <button @click="deleteExpense(expense.id)" 
+                                    class="w-7 h-7 bg-red-500 text-white rounded-full hover:bg-red-600 transition text-lg leading-none">
+                                    ×
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                    
+                    <!-- Category Breakdown -->
+                    <template x-if="!loading && filteredExpenses.length > 0">
+                        <div class="mt-4 pt-3 border-t-2 flex-shrink-0">
+                            <h3 class="text-base font-bold text-gray-800 mb-2">Category Breakdown</h3>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3 max-h-32 overflow-y-auto">
+                                <template x-for="item in categoryTotals" :key="item.category">
+                                    <div class="flex justify-between items-center p-2 bg-gray-100 rounded text-xs">
+                                        <span class="font-semibold text-gray-700 truncate" x-text="item.category" :title="item.category"></span>
+                                        <span class="font-bold ml-1 whitespace-nowrap"
+                                            :class="item.total < 0 ? 'text-red-600' : 'text-green-600'"
+                                            x-text="(item.total < 0 ? '-' : '') + '$' + Math.abs(item.total).toFixed(2)">
+                                        </span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </section>
+            </div>
+        </div>
+
+        <!-- Budget Tab -->
+        <div x-show="activeTab === 'budget'" x-cloak>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Budget Limits Card -->
+                <section class="bg-white rounded-xl shadow-xl p-6">
+                    <h2 class="text-2xl font-bold text-purple-600 mb-4">Budget Limits for <span x-text="monthDisplay"></span></h2>
+                    
+                    <template x-if="!loading">
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center mb-4">
+                                <span class="text-sm text-gray-600">Configure monthly budget limits</span>
+                                <button @click="editingBudget = !editingBudget"
+                                    class="text-sm bg-gray-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-600 transition">
+                                    <span x-show="!editingBudget" x-cloak>Edit Limits</span>
+                                    <span x-show="editingBudget" x-cloak>Cancel</span>
+                                </button>
+                            </div>
+                            
+                            <template x-if="editingBudget">
+                                <div class="bg-gray-50 p-4 rounded-lg space-y-3 border-2 border-purple-300">
+                                    <p class="text-sm text-gray-600 mb-2">Set budget limits for <span class="font-semibold" x-text="monthDisplay"></span></p>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-sm font-semibold text-gray-700 mb-1">Fixed Bills + Loans</label>
+                                            <input type="number" x-model.number="budgetLimits.fixedBillsLoans" step="10" min="0"
+                                                class="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-semibold text-gray-700 mb-1">Variable Spending Cap</label>
+                                            <input type="number" x-model.number="budgetLimits.variableSpending" step="10" min="0"
+                                                class="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-semibold text-gray-700 mb-1">Investing Min</label>
+                                            <input type="number" x-model.number="budgetLimits.investingMin" step="50" min="0"
+                                                class="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-semibold text-gray-700 mb-1">Investing Max</label>
+                                            <input type="number" x-model.number="budgetLimits.investingMax" step="50" min="0"
+                                                class="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none">
+                                        </div>
+                                    </div>
+                                    <button @click="saveBudgetLimits()"
+                                        class="w-full bg-purple-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-purple-700 transition">
+                                        Save Budget Limits
+                                    </button>
+                                </div>
+                            </template>
+                            
+                            <!-- Budget Progress Display -->
+                            <template x-if="!editingBudget && filteredExpenses.length > 0">
+                                <div class="space-y-4">
+                                    <!-- Fixed Bills + Loans -->
+                                    <div class="bg-white border-2 rounded-lg p-4"
+                                        :class="fixedBillsLoansSpent > budgetLimits.fixedBillsLoans ? 'border-red-500' : 'border-gray-200'">
+                                        <div class="flex justify-between items-center mb-2">
+                                            <span class="font-semibold text-gray-700">Fixed Bills + Loans</span>
+                                            <span class="font-bold"
+                                                :class="fixedBillsLoansSpent > budgetLimits.fixedBillsLoans ? 'text-red-600' : 'text-gray-700'">
+                                                $<span x-text="fixedBillsLoansSpent.toFixed(2)"></span> / 
+                                                $<span x-text="budgetLimits.fixedBillsLoans.toFixed(2)"></span>
+                                            </span>
+                                        </div>
+                                        <div class="w-full bg-gray-200 rounded-full h-3 mb-1">
+                                            <div class="h-3 rounded-full transition-all"
+                                                :class="fixedBillsLoansSpent > budgetLimits.fixedBillsLoans ? 'bg-red-500' : 'bg-green-500'"
+                                                :style="`width: ${Math.min(100, (fixedBillsLoansSpent / budgetLimits.fixedBillsLoans) * 100)}%`">
+                                            </div>
+                                        </div>
+                                        <div class="text-sm"
+                                            :class="fixedBillsLoansRemaining >= 0 ? 'text-green-600' : 'text-red-600'">
+                                            Remaining: $<span x-text="Math.abs(fixedBillsLoansRemaining).toFixed(2)"></span>
+                                            <span x-show="fixedBillsLoansRemaining < 0" x-cloak class="font-semibold"> (EXCEEDED)</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Variable Spending -->
+                                    <div class="bg-white border-2 rounded-lg p-4"
+                                        :class="variableSpendingSpent > budgetLimits.variableSpending ? 'border-red-500' : 'border-gray-200'">
+                                        <div class="flex justify-between items-center mb-2">
+                                            <span class="font-semibold text-gray-700">Variable Spending Cap</span>
+                                            <span class="font-bold"
+                                                :class="variableSpendingSpent > budgetLimits.variableSpending ? 'text-red-600' : 'text-gray-700'">
+                                                $<span x-text="variableSpendingSpent.toFixed(2)"></span> / 
+                                                $<span x-text="budgetLimits.variableSpending.toFixed(2)"></span>
+                                            </span>
+                                        </div>
+                                        <div class="w-full bg-gray-200 rounded-full h-3 mb-1">
+                                            <div class="h-3 rounded-full transition-all"
+                                                :class="variableSpendingSpent > budgetLimits.variableSpending ? 'bg-red-500' : 'bg-yellow-500'"
+                                                :style="`width: ${Math.min(100, (variableSpendingSpent / budgetLimits.variableSpending) * 100)}%`">
+                                            </div>
+                                        </div>
+                                        <div class="text-sm"
+                                            :class="variableSpendingRemaining >= 0 ? 'text-green-600' : 'text-red-600'">
+                                            Remaining: $<span x-text="Math.abs(variableSpendingRemaining).toFixed(2)"></span>
+                                            <span x-show="variableSpendingRemaining < 0" x-cloak class="font-semibold"> (EXCEEDED)</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Investing -->
+                                    <div class="bg-white border-2 rounded-lg p-4"
+                                        :class="investingProgress.inRange ? 'border-green-500' : (investingProgress.aboveMax ? 'border-red-500' : 'border-yellow-500')">
+                                        <div class="flex justify-between items-center mb-2">
+                                            <span class="font-semibold text-gray-700">Investing</span>
+                                            <span class="font-bold"
+                                                :class="investingProgress.inRange ? 'text-green-600' : (investingProgress.aboveMax ? 'text-red-600' : 'text-yellow-600')">
+                                                $<span x-text="investmentTotal.toFixed(2)"></span> / 
+                                                $<span x-text="budgetLimits.investingMin.toFixed(2)"></span>–$<span x-text="budgetLimits.investingMax.toFixed(2)"></span>
+                                            </span>
+                                        </div>
+                                        <div class="w-full bg-gray-200 rounded-full h-3 mb-1">
+                                            <div class="h-3 rounded-full transition-all"
+                                                :class="investingProgress.inRange ? 'bg-green-500' : (investingProgress.aboveMax ? 'bg-red-500' : 'bg-yellow-500')"
+                                                :style="`width: ${Math.min(100, (investmentTotal / budgetLimits.investingMax) * 100)}%`">
+                                            </div>
+                                        </div>
+                                        <div class="text-sm"
+                                            :class="investingProgress.inRange ? 'text-green-600' : (investingProgress.aboveMax ? 'text-red-600' : 'text-yellow-600')">
+                                            <span x-show="investingProgress.belowMin" x-cloak>Below target: $<span x-text="(budgetLimits.investingMin - investmentTotal).toFixed(2)"></span> more needed</span>
+                                            <span x-show="investingProgress.inRange" x-cloak class="font-semibold">✓ Within target range</span>
+                                            <span x-show="investingProgress.aboveMax" x-cloak>Above max: $<span x-text="(investmentTotal - budgetLimits.investingMax).toFixed(2)"></span> over</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Remaining Buffer -->
+                                    <div class="bg-gradient-to-r from-teal-100 to-teal-200 border-2 border-teal-300 rounded-lg p-4">
+                                        <div class="flex justify-between items-center">
+                                            <span class="font-semibold text-gray-800">Remaining Buffer / Guilt-Free Money</span>
+                                            <span class="font-bold text-lg"
+                                                :class="remainingBuffer >= 0 ? 'text-green-700' : 'text-red-700'">
+                                                $<span x-text="remainingBuffer.toFixed(2)"></span>
+                                            </span>
+                                        </div>
+                                        <p class="text-sm text-gray-600 mt-1">Income - (Bills/Loans + Variable Spending + Investment)</p>
+                                        <p class="text-xs text-gray-500 mt-1">
+                                            Target: ~$1,600 | 
+                                            <span :class="remainingBuffer >= 1600 ? 'text-green-600' : (remainingBuffer >= 0 ? 'text-yellow-600' : 'text-red-600')">
+                                                <span x-show="remainingBuffer >= 1600" x-cloak>✓ Above target</span>
+                                                <span x-show="remainingBuffer >= 0 && remainingBuffer < 1600" x-cloak>Below target</span>
+                                                <span x-show="remainingBuffer < 0" x-cloak>⚠ Negative</span>
+                                            </span>
+                                        </p>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </section>
+                
+                <!-- Month Navigation for Budget Tab -->
+                <section class="bg-white rounded-xl shadow-xl p-6">
+                    <h2 class="text-2xl font-bold text-purple-600 mb-4">Month Selection</h2>
+                    <div class="flex items-center justify-center gap-4 p-4 bg-gray-50 rounded-lg flex-wrap">
+                        <button @click="previousMonth()" 
+                            class="w-10 h-10 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition font-bold text-xl">
+                            ‹
+                        </button>
+                        <div class="flex items-center gap-3">
+                            <input type="month" x-model="selectedMonth" @change="editingBudget = false; loadExpenses()" class="hidden" id="monthInput" x-ref="monthInput">
+                            <span class="text-lg font-semibold text-gray-800" x-text="monthDisplay"></span>
+                            <button @click="$refs.monthInput.click()" 
+                                class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 transition">
+                                📅
+                            </button>
+                        </div>
+                        <button @click="nextMonth()" 
+                            class="w-10 h-10 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition font-bold text-xl">
+                            ›
+                        </button>
+                        <button @click="goToCurrentMonth()" 
+                            class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition">
+                            Today
+                        </button>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Summary Tab -->
+        <div x-show="activeTab === 'summary'" x-cloak>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Category Breakdown -->
+                <section class="bg-white rounded-xl shadow-xl p-6">
+                    <h2 class="text-2xl font-bold text-purple-600 mb-4">Category Breakdown</h2>
+                    <p class="text-xs text-gray-500 mb-4">
+                        💡 Double-click any category to see detailed breakdown
+                        <span class="block mt-1">📌 Expenses grouped by subcategory (or description if no subcategory)</span>
+                    </p>
+                    <template x-if="!loading && filteredExpenses.length > 0">
+                        <div class="space-y-2">
+                            <template x-for="item in categoryTotals" :key="item.category">
+                                <div class="bg-gray-100 rounded-lg overflow-hidden">
+                                    <!-- Category Header - Clickable -->
+                                    <div @dblclick="expandedCategory = expandedCategory === item.category ? null : item.category"
+                                        class="flex justify-between items-center p-3 cursor-pointer hover:bg-gray-200 transition"
+                                        :class="expandedCategory === item.category ? 'bg-purple-100' : ''">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-semibold text-gray-700 text-sm" x-text="item.category"></span>
+                                            <span x-show="hasSubcategories(item.category)" x-cloak 
+                                                class="text-xs text-purple-600">(Double-click to expand)</span>
+                                        </div>
+                                        <span class="font-bold text-sm whitespace-nowrap"
+                                            :class="item.total < 0 ? 'text-red-600' : 'text-green-600'"
+                                            x-text="(item.total < 0 ? '-' : '') + '$' + Math.abs(item.total).toFixed(2)">
+                                        </span>
+                                    </div>
+                                    
+                                    <!-- Subcategory Breakdown - Expandable -->
+                                    <div x-show="expandedCategory === item.category && hasSubcategories(item.category)" 
+                                        x-cloak
+                                        x-transition:enter="transition ease-out duration-200"
+                                        x-transition:enter-start="opacity-0 transform -translate-y-2"
+                                        x-transition:enter-end="opacity-100 transform translate-y-0"
+                                        class="bg-white border-t border-gray-200 p-3 space-y-2">
+                                        <div class="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
+                                            Breakdown
+                                        </div>
+                                        <template x-for="subcat in getSubcategoryTotals(item.category)" :key="subcat.subcategory">
+                                            <div class="flex justify-between items-center p-2 bg-purple-50 rounded border-l-4 border-purple-400">
+                                                <div class="flex items-center gap-2 flex-1 min-w-0">
+                                                    <span class="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full font-medium truncate"
+                                                        :title="subcat.subcategory"
+                                                        x-text="subcat.subcategory"></span>
+                                                </div>
+                                                <span class="font-bold text-sm text-purple-700 whitespace-nowrap ml-2"
+                                                    x-text="'$' + subcat.total.toFixed(2)">
+                                                </span>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                    <template x-if="!loading && filteredExpenses.length === 0">
+                        <div class="text-center py-8 text-gray-500" x-text="emptyMessage"></div>
+                    </template>
+                </section>
+                
+                <!-- Financial Summary -->
+                <section class="bg-white rounded-xl shadow-xl p-6">
+                    <h2 class="text-2xl font-bold text-purple-600 mb-4">Financial Summary</h2>
+                    <template x-if="!loading && filteredExpenses.length > 0">
+                        <div class="space-y-3">
+                            <div class="bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-lg text-center font-semibold">
+                                Chequing: $<span x-text="chequingTotal.toFixed(2)"></span>
+                            </div>
+                            <div class="bg-gradient-to-r from-purple-600 to-purple-800 text-white p-4 rounded-lg text-center font-semibold">
+                                Credit Card: $<span x-text="creditCardTotal.toFixed(2)"></span>
+                            </div>
+                            <div class="bg-gradient-to-r from-gray-700 to-gray-900 text-white p-4 rounded-lg text-center font-bold">
+                                Total Expenses: $<span x-text="grandTotal.toFixed(2)"></span>
+                            </div>
+                            <template x-if="incomeTotal > 0">
+                                <div class="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4 rounded-lg text-center font-semibold">
+                                    Income: $<span x-text="incomeTotal.toFixed(2)"></span>
+                                </div>
+                            </template>
+                            <template x-if="investmentTotal !== 0">
+                                <div class="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white p-4 rounded-lg text-center font-semibold">
+                                    Investment: $<span x-text="investmentTotal.toFixed(2)"></span>
+                                </div>
+                            </template>
+                            <template x-if="incomeTotal > 0 || investmentTotal !== 0">
+                                <div class="bg-gradient-to-r from-teal-600 to-teal-800 text-white p-4 rounded-lg text-center font-bold text-lg">
+                                    Net Total: $<span x-text="netTotal.toFixed(2)"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </section>
+            </div>
+        </div>
+
+        <!-- Charts Tab -->
+        <div x-show="activeTab === 'charts'" x-cloak style="display: none;">
+            <template x-if="loading">
+                <div class="text-center py-8 text-white">
+                    <p>Loading chart data...</p>
+                </div>
+            </template>
+            <template x-if="!loading">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Category Breakdown Chart -->
+                    <section class="bg-white rounded-xl shadow-xl p-6">
+                        <h2 class="text-2xl font-bold text-purple-600 mb-4">Category Breakdown</h2>
+                        <div class="h-80" x-show="activeTab === 'charts'">
+                            <canvas x-ref="categoryChart" id="categoryChart"></canvas>
+                        </div>
+                        <template x-if="categoryTotals.filter(cat => cat.total > 0 && !['Income', 'Investment', 'Payment'].includes(cat.category)).length === 0">
+                            <p class="text-center text-gray-500 mt-4">No expense data available for this chart</p>
+                        </template>
+                    </section>
+                    
+                    <!-- Monthly Spending Trend -->
+                    <section class="bg-white rounded-xl shadow-xl p-6">
+                        <h2 class="text-2xl font-bold text-purple-600 mb-4">Monthly Spending Trend</h2>
+                        <div class="h-80">
+                            <canvas x-ref="trendChart" id="trendChart"></canvas>
+                        </div>
+                    </section>
+                    
+                    <!-- Budget vs Actual -->
+                    <section class="bg-white rounded-xl shadow-xl p-6 lg:col-span-2">
+                        <h2 class="text-2xl font-bold text-purple-600 mb-4">Budget vs Actual Spending</h2>
+                        <div class="h-80">
+                            <canvas x-ref="budgetChart" id="budgetChart"></canvas>
+                        </div>
+                    </section>
+                </div>
+            </template>
+        </div>
+
+        <!-- Insights Tab -->
+        <div x-show="activeTab === 'insights'" x-cloak>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Spending Insights -->
+                <section class="bg-white rounded-xl shadow-xl p-6">
+                    <h2 class="text-2xl font-bold text-purple-600 mb-4">Spending Insights</h2>
+                    <template x-if="!loading && filteredExpenses.length > 0">
+                        <div class="space-y-4">
+                            <!-- Average Daily Spending -->
+                            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+                                <div class="flex justify-between items-center">
+                                    <span class="font-semibold text-gray-700">Average Daily Spending</span>
+                                    <span class="text-xl font-bold text-blue-600">$<span x-text="averageDailySpending.toFixed(2)"></span></span>
+                                </div>
+                                <p class="text-sm text-gray-600 mt-1">Based on <span x-text="daysInMonth"></span> days this month</p>
+                            </div>
+                            
+                            <!-- Projected Month-End Spending -->
+                            <div class="bg-purple-50 border-l-4 border-purple-500 p-4 rounded">
+                                <div class="flex justify-between items-center">
+                                    <span class="font-semibold text-gray-700">Projected Month-End</span>
+                                    <span class="text-xl font-bold text-purple-600">$<span x-text="projectedMonthEnd.toFixed(2)"></span></span>
+                                </div>
+                                <p class="text-sm text-gray-600 mt-1">At current spending rate</p>
+                            </div>
+                            
+                            <!-- Top Categories -->
+                            <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded">
+                                <div class="font-semibold text-gray-700 mb-2">Top 3 Spending Categories</div>
+                                <div class="space-y-2">
+                                    <template x-for="(cat, index) in topCategories" :key="cat.category">
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-sm text-gray-700">
+                                                <span class="font-bold" x-text="index + 1"></span>. <span x-text="cat.category"></span>
+                                            </span>
+                                            <span class="font-semibold text-green-600">$<span x-text="cat.total.toFixed(2)"></span></span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                            
+                            <!-- Month Comparison -->
+                            <template x-if="previousMonthTotal > 0">
+                                <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
+                                    <div class="flex justify-between items-center">
+                                        <span class="font-semibold text-gray-700">vs Previous Month</span>
+                                        <span class="text-xl font-bold"
+                                            :class="monthComparison >= 0 ? 'text-red-600' : 'text-green-600'">
+                                            <span x-show="monthComparison >= 0" x-cloak>+</span><span x-text="monthComparison.toFixed(1)"></span>%
+                                        </span>
+                                    </div>
+                                    <p class="text-sm text-gray-600 mt-1">
+                                        <span x-text="previousMonthTotal.toFixed(2)"></span> → <span x-text="actualExpensesTotal.toFixed(2)"></span>
+                                    </p>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </section>
+                
+                <!-- Budget Alerts -->
+                <section class="bg-white rounded-xl shadow-xl p-6">
+                    <h2 class="text-2xl font-bold text-purple-600 mb-4">Budget Alerts</h2>
+                    <template x-if="!loading && filteredExpenses.length > 0">
+                        <div class="space-y-3">
+                            <template x-for="alert in budgetAlerts" :key="alert.type">
+                                <div class="p-4 rounded-lg border-l-4"
+                                    :class="alert.severity === 'critical' ? 'bg-red-50 border-red-500' : (alert.severity === 'warning' ? 'bg-yellow-50 border-yellow-500' : 'bg-green-50 border-green-500')">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="text-xl" x-text="alert.icon"></span>
+                                        <span class="font-bold text-gray-800" x-text="alert.title"></span>
+                                    </div>
+                                    <p class="text-sm text-gray-700" x-text="alert.message"></p>
+                                    <div class="mt-2 text-xs text-gray-600" x-text="alert.details"></div>
+                                </div>
+                            </template>
+                            <template x-if="budgetAlerts.length === 0">
+                                <div class="text-center py-8 text-gray-500">
+                                    <div class="text-4xl mb-2">✅</div>
+                                    <p>All budgets are on track!</p>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- Email Modal -->
+    <div x-show="showEmailModal" x-cloak
+        x-transition:enter="transition ease-out duration-300"
+        x-transition:enter-start="opacity-0"
+        x-transition:enter-end="opacity-100"
+        x-transition:leave="transition ease-in duration-300"
+        x-transition:leave-start="opacity-100"
+        x-transition:leave-end="opacity-0"
+        class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+            @click.away="showEmailModal = false">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-bold text-purple-600">📧 Send Budget Report</h3>
+                <button @click="showEmailModal = false" 
+                    class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+            </div>
+            
+            <p class="text-gray-600 mb-4">Send a weekly budget report to your email address.</p>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
+                <input type="email" x-model="emailAddress" 
+                    placeholder="your.email@example.com"
+                    class="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none"
+                    :disabled="sendingEmail">
+            </div>
+            
+            <div class="flex gap-3">
+                <button @click="sendBudgetEmail()" 
+                    :disabled="sendingEmail || !emailAddress"
+                    class="flex-1 bg-purple-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="!sendingEmail" x-cloak>Send Report</span>
+                    <span x-show="sendingEmail" x-cloak>Sending...</span>
+                </button>
+                <button @click="sendTestEmail()" 
+                    :disabled="sendingEmail || !emailAddress"
+                    class="bg-gray-500 text-white py-2 px-4 rounded-lg font-semibold hover:bg-gray-600 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                    Test
+                </button>
+                <button @click="showEmailModal = false" 
+                    class="bg-gray-200 text-gray-700 py-2 px-4 rounded-lg font-semibold hover:bg-gray-300 transition">
+                    Cancel
+                </button>
+            </div>
+            
+            <p class="text-xs text-gray-500 mt-4">
+                💡 Configure email settings in your .env file (see EMAIL_SETUP.md)
+            </p>
+        </div>
+    </div>
+
+    <!-- Notification -->
+    <div x-show="notification.show" x-cloak
+        x-transition:enter="transition ease-out duration-300"
+        x-transition:enter-start="opacity-0 transform translate-x-full"
+        x-transition:enter-end="opacity-100 transform translate-x-0"
+        x-transition:leave="transition ease-in duration-300"
+        x-transition:leave-start="opacity-100 transform translate-x-0"
+        x-transition:leave-end="opacity-0 transform translate-x-full"
+        class="fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white font-semibold z-50"
+        :class="notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'"
+        x-text="notification.message">
+    </div>
+
+    <script>
+        function expenseTracker() {
+            return {
+                expenses: [],
+                allExpenses: [], // Store all expenses for filtering
+                loading: true,
+                editingExpense: false,
+                activeTab: 'expenses', // 'expenses', 'budget', 'summary', 'charts', 'insights'
+                chartInstances: {},
+                allMonthsData: [], // Store data for all months for charts
+                selectedMonth: '',
+                monthDisplay: '',
+                searchQuery: '',
+                selectedCategoryFilter: '',
+                notification: { show: false, message: '', type: 'success' },
+                editingBudget: false,
+                showEmailModal: false,
+                emailAddress: '',
+                sendingEmail: false,
+                expandedCategory: null, // Track which category is expanded to show subcategories
+                budgetLimits: {
+                    fixedBillsLoans: 600,
+                    variableSpending: 800,
+                    investingMin: 1500,
+                    investingMax: 1800
+                },
+                formData: {
+                    id: '',
+                    date: new Date().toISOString().split('T')[0],
+                    category: '',
+                    subcategory: '',
+                    description: '',
+                    amount: '',
+                    isBill: false,
+                    isRecurring: false
+                },
+                categoriesWithSubcategories: ['Groceries', 'Shopping', 'Entertainment', 'Healthcare', 'Pet', 'Personal Care', 'Transportation'],
+                subcategorySuggestions: [],
+                previousMonthData: null,
+                
+                get chequingTotal() {
+                    return this.filteredExpenses.reduce((sum, exp) => {
+                        if (exp.category === 'Bills' || exp.category === 'Loans') {
+                            return sum + parseFloat(exp.amount);
+                        } else if (exp.category === 'Subscription' && exp.is_bill) {
+                            return sum + parseFloat(exp.amount);
+                        }
+                        return sum;
+                    }, 0);
+                },
+                
+                get creditCardTotal() {
+                    return this.filteredExpenses.reduce((sum, exp) => {
+                        if (exp.category === 'Payment') {
+                            return sum - parseFloat(exp.amount);
+                        } else if (exp.category === 'Bills' || exp.category === 'Loans') {
+                            return sum;
+                        } else if (exp.category === 'Subscription' && exp.is_bill) {
+                            return sum;
+                        } else if (exp.category === 'Income' || exp.category === 'Investment') {
+                            return sum; // Income and Investment don't go to credit card total
+                        } else {
+                            return sum + parseFloat(exp.amount);
+                        }
+                    }, 0);
+                },
+                
+                get incomeTotal() {
+                    return this.filteredExpenses.reduce((sum, exp) => {
+                        if (exp.category === 'Income') {
+                            return sum + parseFloat(exp.amount);
+                        }
+                        return sum;
+                    }, 0);
+                },
+                
+                get investmentTotal() {
+                    return this.filteredExpenses.reduce((sum, exp) => {
+                        if (exp.category === 'Investment') {
+                            return sum + parseFloat(exp.amount);
+                        }
+                        return sum;
+                    }, 0);
+                },
+                
+                get grandTotal() {
+                    return this.chequingTotal + this.creditCardTotal;
+                },
+                
+                get actualExpensesTotal() {
+                    // Actual expenses without subtracting payments
+                    // Payments are not expenses, they're payments towards expenses
+                    return this.filteredExpenses.reduce((sum, exp) => {
+                        if (exp.category === 'Payment' || exp.category === 'Income' || exp.category === 'Investment') {
+                            return sum; // Exclude payments, income, and investment
+                        }
+                        return sum + parseFloat(exp.amount);
+                    }, 0);
+                },
+                
+                get netTotal() {
+                    // Net total = Income - Actual Expenses - Investment
+                    return this.incomeTotal - this.actualExpensesTotal - this.investmentTotal;
+                },
+                
+                get fixedBillsLoansSpent() {
+                    return this.filteredExpenses.reduce((sum, exp) => {
+                        if (exp.category === 'Bills' || exp.category === 'Loans' || 
+                            (exp.category === 'Subscription' && exp.is_bill)) {
+                            return sum + parseFloat(exp.amount);
+                        }
+                        return sum;
+                    }, 0);
+                },
+                
+                get variableSpendingSpent() {
+                    return this.filteredExpenses.reduce((sum, exp) => {
+                        const variableCategories = ['Groceries', 'Fast Food', 'Restaurant', 'Coffee', 
+                            'Transportation', 'Shopping', 'Entertainment', 'Healthcare', 
+                            'Education', 'Travel', 'Personal Care', 'Pet', 'Other'];
+                        if (variableCategories.includes(exp.category) || 
+                            (exp.category === 'Subscription' && !exp.is_bill)) {
+                            return sum + parseFloat(exp.amount);
+                        }
+                        return sum;
+                    }, 0);
+                },
+                
+                get fixedBillsLoansRemaining() {
+                    return this.budgetLimits.fixedBillsLoans - this.fixedBillsLoansSpent;
+                },
+                
+                get variableSpendingRemaining() {
+                    return this.budgetLimits.variableSpending - this.variableSpendingSpent;
+                },
+                
+                get investingProgress() {
+                    return {
+                        current: this.investmentTotal,
+                        min: this.budgetLimits.investingMin,
+                        max: this.budgetLimits.investingMax,
+                        inRange: this.investmentTotal >= this.budgetLimits.investingMin && 
+                                this.investmentTotal <= this.budgetLimits.investingMax,
+                        belowMin: this.investmentTotal < this.budgetLimits.investingMin,
+                        aboveMax: this.investmentTotal > this.budgetLimits.investingMax
+                    };
+                },
+                
+                get remainingBuffer() {
+                    // Remaining = (Fixed Bills/Loans + Variable Spending + Investment) - Income
+                    const plannedSpending = this.fixedBillsLoansSpent + this.variableSpendingSpent + this.investmentTotal;
+                    return this.incomeTotal - plannedSpending;
+                },
+                
+                get filteredExpenses() {
+                    let filtered = [...this.allExpenses];
+                    
+                    // Filter by category
+                    if (this.selectedCategoryFilter) {
+                        filtered = filtered.filter(exp => exp.category === this.selectedCategoryFilter);
+                    }
+                    
+                    // Filter by search query
+                    if (this.searchQuery) {
+                        const query = this.searchQuery.toLowerCase();
+                        filtered = filtered.filter(exp => 
+                            exp.description.toLowerCase().includes(query) ||
+                            exp.category.toLowerCase().includes(query) ||
+                            (exp.subcategory && exp.subcategory.toLowerCase().includes(query)) ||
+                            exp.amount.toString().includes(query) ||
+                            exp.date.includes(query)
+                        );
+                    }
+                    
+                    return filtered;
+                },
+                
+                get availableCategories() {
+                    const categories = new Set(this.allExpenses.map(exp => exp.category));
+                    return Array.from(categories).sort();
+                },
+                
+                get categoryTotals() {
+                    const totals = {};
+                    this.filteredExpenses.forEach(expense => {
+                        if (expense.category === 'Payment') {
+                            // Payments are negative, but we'll show them separately
+                            if (!totals['Payment']) totals['Payment'] = 0;
+                            totals['Payment'] -= parseFloat(expense.amount);
+                        } else {
+                            if (!totals[expense.category]) totals[expense.category] = 0;
+                            totals[expense.category] += parseFloat(expense.amount);
+                        }
+                    });
+                    return Object.entries(totals)
+                        .map(([category, total]) => ({ category, total }))
+                        .sort((a, b) => b.total - a.total);
+                },
+                
+                hasSubcategories(category) {
+                    // Check if this category has any expenses (all categories can be expanded)
+                    return this.filteredExpenses.some(exp => exp.category === category);
+                },
+                
+                getSubcategoryTotals(category) {
+                    const subcatTotals = {};
+                    this.filteredExpenses
+                        .filter(exp => exp.category === category)
+                        .forEach(expense => {
+                            // Use explicit subcategory if provided, otherwise use description as subcategory
+                            let subcat = expense.subcategory || expense.description || '(No description)';
+                            
+                            if (!subcatTotals[subcat]) {
+                                subcatTotals[subcat] = { subcategory: subcat, total: 0 };
+                            }
+                            subcatTotals[subcat].total += parseFloat(expense.amount);
+                        });
+                    
+                    // Convert to array and sort by total (descending)
+                    return Object.values(subcatTotals)
+                        .sort((a, b) => b.total - a.total);
+                },
+                
+                get emptyMessage() {
+                    if (this.allExpenses.length === 0) {
+                        const today = new Date();
+                        const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                        return this.selectedMonth === currentMonth 
+                            ? 'No expenses yet. Add your first expense above!'
+                            : 'No expenses for this month.';
+                    }
+                    return 'No expenses match your search or filter criteria.';
+                },
+                
+                // Insights Computed Properties
+                get daysInMonth() {
+                    const [year, month] = this.selectedMonth.split('-').map(Number);
+                    return new Date(year, month, 0).getDate();
+                },
+                
+                get currentDayOfMonth() {
+                    const today = new Date();
+                    const [year, month] = this.selectedMonth.split('-').map(Number);
+                    if (today.getFullYear() === year && today.getMonth() + 1 === month) {
+                        return today.getDate();
+                    }
+                    return this.daysInMonth;
+                },
+                
+                get averageDailySpending() {
+                    if (this.currentDayOfMonth === 0) return 0;
+                    return this.actualExpensesTotal / this.currentDayOfMonth;
+                },
+                
+                get projectedMonthEnd() {
+                    return this.averageDailySpending * this.daysInMonth;
+                },
+                
+                get topCategories() {
+                    return this.categoryTotals
+                        .filter(cat => cat.total > 0 && !['Income', 'Investment', 'Payment'].includes(cat.category))
+                        .slice(0, 3);
+                },
+                
+                get previousMonthTotal() {
+                    if (!this.previousMonthData) return 0;
+                    return this.previousMonthData.reduce((sum, exp) => {
+                        if (exp.category === 'Payment' || exp.category === 'Income' || exp.category === 'Investment') {
+                            return sum;
+                        }
+                        return sum + parseFloat(exp.amount);
+                    }, 0);
+                },
+                
+                get monthComparison() {
+                    if (this.previousMonthTotal === 0) return 0;
+                    return ((this.actualExpensesTotal - this.previousMonthTotal) / this.previousMonthTotal) * 100;
+                },
+                
+                get budgetAlerts() {
+                    const alerts = [];
+                    const threshold = 0.8; // 80% threshold for warnings
+                    
+                    // Fixed Bills/Loans Alert
+                    const billsPercent = (this.fixedBillsLoansSpent / this.budgetLimits.fixedBillsLoans) * 100;
+                    if (billsPercent >= 100) {
+                        alerts.push({
+                            type: 'bills',
+                            severity: 'critical',
+                            icon: '🚨',
+                            title: 'Bills/Loans Budget Exceeded',
+                            message: `You've exceeded your bills/loans budget by $${(this.fixedBillsLoansSpent - this.budgetLimits.fixedBillsLoans).toFixed(2)}`,
+                            details: `Spent: $${this.fixedBillsLoansSpent.toFixed(2)} / Budget: $${this.budgetLimits.fixedBillsLoans.toFixed(2)}`
+                        });
+                    } else if (billsPercent >= threshold * 100) {
+                        alerts.push({
+                            type: 'bills',
+                            severity: 'warning',
+                            icon: '⚠️',
+                            title: 'Bills/Loans Budget Warning',
+                            message: `You're at ${billsPercent.toFixed(0)}% of your bills/loans budget`,
+                            details: `Remaining: $${(this.budgetLimits.fixedBillsLoans - this.fixedBillsLoansSpent).toFixed(2)}`
+                        });
+                    }
+                    
+                    // Variable Spending Alert
+                    const variablePercent = (this.variableSpendingSpent / this.budgetLimits.variableSpending) * 100;
+                    if (variablePercent >= 100) {
+                        alerts.push({
+                            type: 'variable',
+                            severity: 'critical',
+                            icon: '🚨',
+                            title: 'Variable Spending Budget Exceeded',
+                            message: `You've exceeded your variable spending budget by $${(this.variableSpendingSpent - this.budgetLimits.variableSpending).toFixed(2)}`,
+                            details: `Spent: $${this.variableSpendingSpent.toFixed(2)} / Budget: $${this.budgetLimits.variableSpending.toFixed(2)}`
+                        });
+                    } else if (variablePercent >= threshold * 100) {
+                        alerts.push({
+                            type: 'variable',
+                            severity: 'warning',
+                            icon: '⚠️',
+                            title: 'Variable Spending Budget Warning',
+                            message: `You're at ${variablePercent.toFixed(0)}% of your variable spending budget`,
+                            details: `Remaining: $${(this.budgetLimits.variableSpending - this.variableSpendingSpent).toFixed(2)}`
+                        });
+                    }
+                    
+                    // Investment Alert
+                    if (this.investmentTotal < this.budgetLimits.investingMin) {
+                        alerts.push({
+                            type: 'investment',
+                            severity: 'warning',
+                            icon: '📉',
+                            title: 'Investment Below Target',
+                            message: `You're $${(this.budgetLimits.investingMin - this.investmentTotal).toFixed(2)} below your minimum investment target`,
+                            details: `Current: $${this.investmentTotal.toFixed(2)} / Target: $${this.budgetLimits.investingMin.toFixed(2)}`
+                        });
+                    } else if (this.investmentTotal > this.budgetLimits.investingMax) {
+                        alerts.push({
+                            type: 'investment',
+                            severity: 'warning',
+                            icon: '📈',
+                            title: 'Investment Above Maximum',
+                            message: `You're $${(this.investmentTotal - this.budgetLimits.investingMax).toFixed(2)} above your maximum investment target`,
+                            details: `Current: $${this.investmentTotal.toFixed(2)} / Max: $${this.budgetLimits.investingMax.toFixed(2)}`
+                        });
+                    }
+                    
+                    // Remaining Buffer Alert
+                    if (this.remainingBuffer < 0) {
+                        alerts.push({
+                            type: 'buffer',
+                            severity: 'critical',
+                            icon: '🚨',
+                            title: 'Negative Remaining Buffer',
+                            message: `Your remaining buffer is negative. You're spending more than planned.`,
+                            details: `Buffer: $${this.remainingBuffer.toFixed(2)}`
+                        });
+                    } else if (this.remainingBuffer < 1600) {
+                        alerts.push({
+                            type: 'buffer',
+                            severity: 'warning',
+                            icon: '⚠️',
+                            title: 'Remaining Buffer Below Target',
+                            message: `Your remaining buffer is below the $1,600 target`,
+                            details: `Current: $${this.remainingBuffer.toFixed(2)} / Target: $1,600`
+                        });
+                    }
+                    
+                    return alerts;
+                },
+                
+                switchToChartsTab() {
+                    // Destroy any existing charts first
+                    this.destroyCharts();
+                    
+                    // Switch to charts tab
+                    this.activeTab = 'charts';
+                    
+                    // Wait for DOM to be ready, then render
+                    this.$nextTick(() => {
+                        // Wait a bit more for x-if to create elements
+                        setTimeout(() => {
+                            if (this.activeTab === 'charts') {
+                                this.renderCharts();
+                            }
+                        }, 300);
+                    });
+                },
+                
+                switchToTab(tab) {
+                    // If switching away from charts, destroy them first
+                    if (this.activeTab === 'charts' && tab !== 'charts') {
+                        this.destroyCharts();
+                    }
+                    
+                    this.activeTab = tab;
+                },
+                
+                destroyCharts() {
+                    // Safely destroy all charts
+                    Object.keys(this.chartInstances).forEach(key => {
+                        try {
+                            const chart = this.chartInstances[key];
+                            if (chart) {
+                                // Stop any ongoing animations/updates first
+                                if (chart.stop) {
+                                    try {
+                                        chart.stop();
+                                    } catch (e) {
+                                        // Ignore
+                                    }
+                                }
+                                
+                                // Destroy the chart
+                                if (typeof chart.destroy === 'function') {
+                                    try {
+                                        // Only destroy if canvas still exists and is valid
+                                        if (chart.canvas && chart.canvas.parentNode) {
+                                            chart.destroy();
+                                        }
+                                    } catch (e) {
+                                        // Chart already destroyed or canvas invalid
+                                    }
+                                }
+                                
+                                // Clear the reference
+                                this.chartInstances[key] = null;
+                            }
+                        } catch (e) {
+                            // Silently ignore errors when destroying
+                        }
+                        delete this.chartInstances[key];
+                    });
+                    this.chartInstances = {};
+                },
+                
+                async init() {
+                    const today = new Date();
+                    this.selectedMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                    this.updateMonthDisplay();
+                    await this.loadExpenses();
+                    // Watch for tab changes to render charts
+                    this.$watch('activeTab', (value) => {
+                        if (value === 'charts') {
+                            // Wait for DOM to update, then render charts
+                            this.$nextTick(() => {
+                                setTimeout(() => {
+                                    if (this.activeTab === 'charts' && this.$refs.categoryChart && this.$refs.trendChart && this.$refs.budgetChart) {
+                                        this.renderCharts();
+                                    } else if (this.activeTab === 'charts') {
+                                        // Try again if refs not ready
+                                        setTimeout(() => {
+                                            if (this.activeTab === 'charts') {
+                                                this.renderCharts();
+                                            }
+                                        }, 300);
+                                    }
+                                }, 200);
+                            });
+                        } else {
+                            // Destroy charts when leaving charts tab
+                            this.destroyCharts();
+                        }
+                    });
+                },
+                
+                updateMonthDisplay() {
+                    if (!this.selectedMonth) return;
+                    const [year, month] = this.selectedMonth.split('-');
+                    const date = new Date(year, parseInt(month) - 1);
+                    this.monthDisplay = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                },
+                
+                async previousMonth() {
+                    const [year, month] = this.selectedMonth.split('-').map(Number);
+                    let newYear = year;
+                    let newMonth = month - 1;
+                    if (newMonth < 1) {
+                        newMonth = 12;
+                        newYear = year - 1;
+                    }
+                    this.selectedMonth = `${newYear}-${String(newMonth).padStart(2, '0')}`;
+                    this.updateMonthDisplay();
+                    this.editingBudget = false; // Close budget editor when changing months
+                    await this.loadExpenses();
+                },
+                
+                async nextMonth() {
+                    const [year, month] = this.selectedMonth.split('-').map(Number);
+                    let newYear = year;
+                    let newMonth = month + 1;
+                    if (newMonth > 12) {
+                        newMonth = 1;
+                        newYear = year + 1;
+                    }
+                    this.selectedMonth = `${newYear}-${String(newMonth).padStart(2, '0')}`;
+                    this.updateMonthDisplay();
+                    this.editingBudget = false; // Close budget editor when changing months
+                    await this.loadExpenses();
+                },
+                
+                async goToCurrentMonth() {
+                    const today = new Date();
+                    this.selectedMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                    this.updateMonthDisplay();
+                    this.editingBudget = false; // Close budget editor when changing months
+                    await this.loadExpenses();
+                },
+                
+                async loadExpenses() {
+                    this.loading = true;
+                    try {
+                        const [year, month] = this.selectedMonth.split('-');
+                        const url = `/api/expenses?year=${year}&month=${month}`;
+                        const response = await fetch(url);
+                        this.allExpenses = await response.json();
+                        // Reset filters when loading new month
+                        this.searchQuery = '';
+                        this.selectedCategoryFilter = '';
+                        // Load budget limits for this month
+                        await this.loadBudgetLimits();
+                        // Load all months data for charts
+                        await this.loadAllMonthsData();
+                        // Load previous month data for comparison
+                        await this.loadPreviousMonthData();
+                        // Check for recurring expenses to auto-generate
+                        await this.checkAndGenerateRecurringExpenses();
+                    } catch (error) {
+                        this.showNotification('Error loading expenses', 'error');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                async loadPreviousMonthData() {
+                    try {
+                        const [year, month] = this.selectedMonth.split('-').map(Number);
+                        let prevYear = year;
+                        let prevMonth = month - 1;
+                        if (prevMonth < 1) {
+                            prevMonth = 12;
+                            prevYear = year - 1;
+                        }
+                        const prevMonthKey = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+                        const response = await fetch(`/api/expenses?year=${prevYear}&month=${String(prevMonth).padStart(2, '0')}`);
+                        this.previousMonthData = await response.json();
+                    } catch (error) {
+                        this.previousMonthData = null;
+                    }
+                },
+                
+                async loadAllMonthsData() {
+                    try {
+                        const response = await fetch('/api/expenses/all');
+                        this.allMonthsData = await response.json();
+                    } catch (error) {
+                        console.error('Error loading all months data:', error);
+                    }
+                },
+                
+                async checkAndGenerateRecurringExpenses() {
+                    // Only for current month
+                    const today = new Date();
+                    const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                    if (this.selectedMonth !== currentMonth) return;
+                    
+                    try {
+                        const response = await fetch('/api/expenses/generate-recurring', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ month: currentMonth })
+                        });
+                        const result = await response.json();
+                        if (result.generated && result.generated > 0) {
+                            this.showNotification(`Auto-generated ${result.generated} recurring expense(s)`, 'success');
+                            await this.loadExpenses();
+                        }
+                    } catch (error) {
+                        console.error('Error generating recurring expenses:', error);
+                    }
+                },
+                
+                renderCharts() {
+                    try {
+                        // Only render if we're on the charts tab
+                        if (this.activeTab !== 'charts') {
+                            return;
+                        }
+                        
+                        // Check if Chart.js is loaded
+                        if (typeof Chart === 'undefined') {
+                            console.error('Chart.js is not loaded');
+                            return;
+                        }
+                        
+                        // Destroy existing charts first to prevent conflicts
+                        this.destroyCharts();
+                        
+                        // Small delay to ensure destruction is complete
+                        setTimeout(() => {
+                            if (this.activeTab !== 'charts') {
+                                return;
+                            }
+                            
+                            // Check if canvas elements exist and are valid
+                            const categoryCanvas = this.$refs.categoryChart;
+                            const trendCanvas = this.$refs.trendChart;
+                            const budgetCanvas = this.$refs.budgetChart;
+                            
+                            if (!categoryCanvas || !trendCanvas || !budgetCanvas) {
+                                // Retry only if still on charts tab
+                                if (this.activeTab === 'charts') {
+                                    setTimeout(() => this.renderCharts(), 300);
+                                }
+                                return;
+                            }
+                            
+                            // Verify canvas elements have getContext method and are in DOM
+                            if (!categoryCanvas.getContext || !trendCanvas.getContext || !budgetCanvas.getContext) {
+                                if (this.activeTab === 'charts') {
+                                    setTimeout(() => this.renderCharts(), 300);
+                                }
+                                return;
+                            }
+                            
+                            if (!categoryCanvas.parentNode || !trendCanvas.parentNode || !budgetCanvas.parentNode) {
+                                if (this.activeTab === 'charts') {
+                                    setTimeout(() => this.renderCharts(), 300);
+                                }
+                                return;
+                            }
+                            
+                            // Now create the charts
+                            this.createCharts();
+                        }, 100);
+                    } catch (error) {
+                        console.error('Error in renderCharts:', error);
+                    }
+                },
+                
+                createCharts() {
+                    if (this.activeTab !== 'charts') {
+                        return;
+                    }
+                    
+                    // Wait a bit more to ensure DOM is fully ready
+                    setTimeout(() => {
+                        if (this.activeTab !== 'charts') return;
+                        
+                        // Category Breakdown Chart
+                        const categoryData = this.categoryTotals
+                            .filter(cat => cat.total > 0 && !['Income', 'Investment', 'Payment'].includes(cat.category))
+                            .slice(0, 8);
+                        
+                        if (categoryData.length === 0) {
+                            categoryData.push({ category: 'No Data', total: 0 });
+                        }
+                        
+                        // Create all three charts
+                        this.createCategoryChart(categoryData);
+                        this.createTrendChart();
+                        this.createBudgetChart();
+                    }, 150);
+                },
+                
+                createCategoryChart(categoryData) {
+                    try {
+                        if (this.activeTab !== 'charts' || !this.$refs.categoryChart) {
+                            return;
+                        }
+                        
+                        const canvas = this.$refs.categoryChart;
+                        if (!canvas || !canvas.parentNode) {
+                            return;
+                        }
+                        
+                        // Double-check canvas is in DOM and visible
+                        if (!document.body.contains(canvas)) {
+                            return;
+                        }
+                        
+                        // Verify canvas is actually usable
+                        if (typeof canvas.getContext !== 'function') {
+                            return;
+                        }
+                        
+                        let ctx;
+                        try {
+                            ctx = canvas.getContext('2d');
+                            if (!ctx) return;
+                        } catch (e) {
+                            return;
+                        }
+                        
+                        // Destroy existing chart if it exists
+                        if (this.chartInstances.category) {
+                            try {
+                                this.chartInstances.category.destroy();
+                            } catch (e) {
+                                // Ignore
+                            }
+                        }
+                        
+                        this.chartInstances.category = new Chart(canvas, {
+                        type: 'doughnut',
+                        data: {
+                            labels: categoryData.map(cat => cat.category),
+                            datasets: [{
+                                data: categoryData.map(cat => cat.total),
+                                backgroundColor: [
+                                    '#8B5CF6', '#EC4899', '#F59E0B', '#10B981',
+                                    '#3B82F6', '#EF4444', '#14B8A6', '#F97316'
+                                ]
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: {
+                                duration: 0  // Disable animations to prevent update loops
+                            },
+                            transitions: {
+                                active: {
+                                    animation: {
+                                        duration: 0
+                                    }
+                                }
+                            },
+                            plugins: {
+                                legend: { position: 'bottom' },
+                                tooltip: {
+                                    callbacks: {
+                                        label: (context) => {
+                                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                            const percentage = ((context.parsed / total) * 100).toFixed(1);
+                                            return `${context.label}: $${context.parsed.toFixed(2)} (${percentage}%)`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    } catch (e) {
+                        console.error('Error creating category chart:', e);
+                    }
+                },
+                
+                createTrendChart() {
+                    try {
+                        if (this.activeTab !== 'charts' || !this.$refs.trendChart) {
+                            console.log('Trend chart: Tab not active or canvas not found');
+                            return;
+                        }
+                        
+                        const canvas = this.$refs.trendChart;
+                        if (!canvas || !canvas.parentNode) {
+                            console.log('Trend chart: Canvas not in DOM');
+                            return;
+                        }
+                        
+                        // Double-check canvas is in DOM
+                        if (!document.body.contains(canvas)) {
+                            console.log('Trend chart: Canvas not in document body');
+                            return;
+                        }
+                        
+                        if (typeof canvas.getContext !== 'function') {
+                            console.log('Trend chart: Canvas getContext not available');
+                            return;
+                        }
+                        
+                        // Verify canvas is usable
+                        let ctx;
+                        try {
+                            ctx = canvas.getContext('2d');
+                            if (!ctx) {
+                                console.log('Trend chart: Could not get 2d context');
+                                return;
+                            }
+                        } catch (e) {
+                            console.log('Trend chart: Error getting context', e);
+                            return;
+                        }
+                        
+                        // Destroy existing chart if it exists
+                        if (this.chartInstances.trend) {
+                            try {
+                                this.chartInstances.trend.destroy();
+                            } catch (e) {
+                                // Ignore
+                            }
+                        }
+                        
+                        // Monthly Trend Chart (last 6 months)
+                        const months = [];
+                        const spending = [];
+                        const today = new Date();
+                        for (let i = 5; i >= 0; i--) {
+                            const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                            const monthExpenses = (this.allMonthsData || []).filter(exp => 
+                                exp.date && exp.date.startsWith(monthKey) && 
+                                !['Income', 'Investment', 'Payment'].includes(exp.category)
+                            );
+                            const total = monthExpenses.reduce((sum, exp) => sum + parseFloat(exp.amount || 0), 0);
+                            months.push(date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }));
+                            spending.push(total);
+                        }
+                        
+                        console.log('Creating trend chart with data:', { months, spending });
+                        this.chartInstances.trend = new Chart(canvas, {
+                        type: 'line',
+                        data: {
+                            labels: months,
+                            datasets: [{
+                                label: 'Monthly Spending',
+                                data: spending,
+                                borderColor: '#8B5CF6',
+                                backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                                tension: 0.4,
+                                fill: true
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: {
+                                duration: 0  // Disable animations
+                            },
+                            transitions: {
+                                active: {
+                                    animation: {
+                                        duration: 0
+                                    }
+                                }
+                            },
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: (context) => `$${context.parsed.y.toFixed(2)}`
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        callback: (value) => `$${value}`
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    } catch (e) {
+                        console.error('Error creating trend chart:', e);
+                    }
+                },
+                
+                createBudgetChart() {
+                    try {
+                        if (this.activeTab !== 'charts' || !this.$refs.budgetChart) {
+                            console.log('Budget chart: Tab not active or canvas not found');
+                            return;
+                        }
+                        
+                        const canvas = this.$refs.budgetChart;
+                        if (!canvas || !canvas.parentNode) {
+                            console.log('Budget chart: Canvas not in DOM');
+                            return;
+                        }
+                        
+                        // Double-check canvas is in DOM
+                        if (!document.body.contains(canvas)) {
+                            console.log('Budget chart: Canvas not in document body');
+                            return;
+                        }
+                        
+                        if (typeof canvas.getContext !== 'function') {
+                            console.log('Budget chart: Canvas getContext not available');
+                            return;
+                        }
+                        
+                        // Verify canvas is usable
+                        let ctx;
+                        try {
+                            ctx = canvas.getContext('2d');
+                            if (!ctx) {
+                                console.log('Budget chart: Could not get 2d context');
+                                return;
+                            }
+                        } catch (e) {
+                            console.log('Budget chart: Error getting context', e);
+                            return;
+                        }
+                        
+                        // Destroy existing chart if it exists
+                        if (this.chartInstances.budget) {
+                            try {
+                                this.chartInstances.budget.destroy();
+                            } catch (e) {
+                                // Ignore
+                            }
+                        }
+                        
+                        // Budget vs Actual Chart
+                        const budgetCategories = ['Fixed Bills/Loans', 'Variable Spending', 'Investment'];
+                        const budgeted = [
+                            this.budgetLimits.fixedBillsLoans,
+                            this.budgetLimits.variableSpending,
+                            this.budgetLimits.investingMax
+                        ];
+                        const actual = [
+                            this.fixedBillsLoansSpent,
+                            this.variableSpendingSpent,
+                            this.investmentTotal
+                        ];
+                        
+                        console.log('Creating budget chart with data:', { budgetCategories, budgeted, actual });
+                        this.chartInstances.budget = new Chart(canvas, {
+                            type: 'bar',
+                            data: {
+                                labels: budgetCategories,
+                                datasets: [
+                                    {
+                                        label: 'Budgeted',
+                                        data: budgeted,
+                                        backgroundColor: 'rgba(139, 92, 246, 0.5)'
+                                    },
+                                    {
+                                        label: 'Actual',
+                                        data: actual,
+                                        backgroundColor: 'rgba(236, 72, 153, 0.5)'
+                                    }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                animation: {
+                                    duration: 0  // Disable animations
+                                },
+                                transitions: {
+                                    active: {
+                                        animation: {
+                                            duration: 0
+                                        }
+                                    }
+                                },
+                                plugins: {
+                                    legend: { position: 'top' },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (context) => `$${context.parsed.y.toFixed(2)}`
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        ticks: {
+                                            callback: (value) => `$${value}`
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    } catch (e) {
+                        console.error('Error creating budget chart:', e);
+                    }
+                },
+                
+                async loadBudgetLimits() {
+                    try {
+                        const response = await fetch(`/api/budget-limits?month=${this.selectedMonth}`);
+                        const limits = await response.json();
+                        this.budgetLimits = {
+                            fixedBillsLoans: limits.fixed_bills_loans || 600,
+                            variableSpending: limits.variable_spending || 800,
+                            investingMin: limits.investing_min || 1500,
+                            investingMax: limits.investing_max || 1800
+                        };
+                    } catch (error) {
+                        console.error('Error loading budget limits:', error);
+                        // Keep default values
+                    }
+                },
+                
+                async saveBudgetLimits() {
+                    try {
+                        const response = await fetch('/api/budget-limits', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                month: this.selectedMonth,
+                                fixed_bills_loans: this.budgetLimits.fixedBillsLoans,
+                                variable_spending: this.budgetLimits.variableSpending,
+                                investing_min: this.budgetLimits.investingMin,
+                                investing_max: this.budgetLimits.investingMax
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            this.showNotification('Budget limits saved successfully!', 'success');
+                            this.editingBudget = false;
+                        } else {
+                            this.showNotification('Error saving budget limits', 'error');
+                        }
+                    } catch (error) {
+                        this.showNotification('Error saving budget limits', 'error');
+                    }
+                },
+                
+                onCategoryChange() {
+                    if (this.formData.category !== 'Subscription') {
+                        this.formData.isBill = false;
+                    }
+                    // Auto-check recurring for subscriptions
+                    if (this.formData.category === 'Subscription') {
+                        this.formData.isRecurring = true;
+                    }
+                    // Clear subcategory when category changes
+                    if (!this.categoriesWithSubcategories.includes(this.formData.category)) {
+                        this.formData.subcategory = '';
+                    }
+                },
+                
+                updateSubcategorySuggestions() {
+                    if (!this.formData.subcategory || !this.formData.category) {
+                        this.subcategorySuggestions = [];
+                        return;
+                    }
+                    
+                    // Get existing subcategories for this category
+                    const existing = this.allExpenses
+                        .filter(exp => exp.category === this.formData.category && exp.subcategory)
+                        .map(exp => exp.subcategory)
+                        .filter((value, index, self) => self.indexOf(value) === index)
+                        .filter(sub => sub.toLowerCase().includes(this.formData.subcategory.toLowerCase()))
+                        .slice(0, 5);
+                    
+                    this.subcategorySuggestions = existing;
+                },
+                
+                async submitExpense() {
+                    try {
+                        const data = {
+                            date: this.formData.date,
+                            category: this.formData.category,
+                            subcategory: this.formData.subcategory || null,
+                            description: this.formData.description,
+                            amount: parseFloat(this.formData.amount),
+                            is_recurring: this.formData.isRecurring || this.formData.category === 'Subscription',
+                            is_active: this.formData.category === 'Subscription' ? true : true,
+                            is_bill: this.formData.category === 'Subscription' ? this.formData.isBill : false
+                        };
+                        
+                        // If editing, preserve existing values
+                        if (this.editingExpense) {
+                            const existing = this.expenses.find(e => e.id == this.formData.id);
+                            if (existing) {
+                                data.is_recurring = existing.is_recurring || data.is_recurring;
+                                data.is_active = existing.is_active !== false;
+                                data.is_bill = this.formData.category === 'Subscription' ? this.formData.isBill : false;
+                            }
+                        }
+                        
+                        const url = this.editingExpense ? `/api/expenses/${this.formData.id}` : '/api/expenses';
+                        const method = this.editingExpense ? 'PUT' : 'POST';
+                        
+                        const response = await fetch(url, {
+                            method,
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(data)
+                        });
+                        
+                        if (response.ok) {
+                            this.resetForm();
+                            await this.loadExpenses();
+                            this.showNotification(
+                                this.editingExpense ? 'Expense updated successfully!' : 'Expense added successfully!',
+                                'success'
+                            );
+                        } else {
+                            const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+                            this.showNotification(error.error || 'Error saving expense', 'error');
+                        }
+                    } catch (error) {
+                        this.showNotification('Error saving expense: ' + error.message, 'error');
+                    }
+                },
+                
+                editExpense(expense) {
+                    this.formData = {
+                        id: expense.id,
+                        date: expense.date,
+                        category: expense.category,
+                        subcategory: expense.subcategory || '',
+                        description: expense.description,
+                        amount: expense.amount,
+                        isBill: expense.is_bill || false,
+                        isRecurring: expense.is_recurring || false
+                    };
+                    this.editingExpense = true;
+                    document.querySelector('.lg\\:grid-cols-2 > section:first-child').scrollIntoView({ behavior: 'smooth' });
+                },
+                
+                clearFilters() {
+                    this.searchQuery = '';
+                    this.selectedCategoryFilter = '';
+                },
+                
+                cancelEdit() {
+                    this.resetForm();
+                },
+                
+                resetForm() {
+                    this.formData = {
+                        id: '',
+                        date: new Date().toISOString().split('T')[0],
+                        category: '',
+                        subcategory: '',
+                        description: '',
+                        amount: '',
+                        isBill: false,
+                        isRecurring: false
+                    };
+                    this.subcategorySuggestions = [];
+                    this.editingExpense = false;
+                },
+                
+                async generateRecurringExpenses() {
+                    try {
+                        const response = await fetch('/api/expenses/generate-recurring', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ month: this.selectedMonth })
+                        });
+                        const result = await response.json();
+                        if (result.generated && result.generated > 0) {
+                            this.showNotification(`Generated ${result.generated} recurring expense(s)`, 'success');
+                            await this.loadExpenses();
+                        } else {
+                            this.showNotification('No recurring expenses to generate', 'info');
+                        }
+                    } catch (error) {
+                        this.showNotification('Error generating recurring expenses', 'error');
+                    }
+                },
+                
+                async sendBudgetEmail() {
+                    if (!this.emailAddress) {
+                        this.showNotification('Please enter an email address', 'error');
+                        return;
+                    }
+                    
+                    if (!this.selectedMonth) {
+                        this.showNotification('Please select a month', 'error');
+                        return;
+                    }
+                    
+                    console.log('Sending budget email to:', this.emailAddress, 'for month:', this.selectedMonth);
+                    
+                    this.sendingEmail = true;
+                    try {
+                        const response = await fetch('/api/send-budget-email', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                email: this.emailAddress,
+                                month: this.selectedMonth
+                            })
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (response.ok && result.success) {
+                            this.showNotification('Budget report sent successfully!', 'success');
+                            this.showEmailModal = false;
+                            this.emailAddress = '';
+                        } else {
+                            console.error('Email send error:', result);
+                            this.showNotification(result.error || 'Failed to send email', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Email send exception:', error);
+                        this.showNotification('Error sending email: ' + error.message, 'error');
+                    } finally {
+                        this.sendingEmail = false;
+                    }
+                },
+                
+                async sendTestEmail() {
+                    if (!this.emailAddress) {
+                        this.showNotification('Please enter an email address', 'error');
+                        return;
+                    }
+                    
+                    this.sendingEmail = true;
+                    try {
+                        const response = await fetch('/api/send-test-email', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                email: this.emailAddress
+                            })
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (response.ok && result.success) {
+                            this.showNotification('Test email sent successfully!', 'success');
+                        } else {
+                            this.showNotification(result.error || 'Failed to send test email', 'error');
+                        }
+                    } catch (error) {
+                        this.showNotification('Error sending test email: ' + error.message, 'error');
+                    } finally {
+                        this.sendingEmail = false;
+                    }
+                },
+                
+                async deleteExpense(id) {
+                    if (!confirm('Are you sure you want to delete this expense?')) return;
+                    
+                    try {
+                        const response = await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
+                        if (response.ok) {
+                            await this.loadExpenses();
+                            this.showNotification('Expense deleted successfully!', 'success');
+                        } else {
+                            this.showNotification('Error deleting expense', 'error');
+                        }
+                    } catch (error) {
+                        this.showNotification('Error deleting expense', 'error');
+                    }
+                },
+                
+                async cancelSubscription(id) {
+                    if (!confirm('Are you sure you want to cancel this subscription?')) return;
+                    
+                    try {
+                        const response = await fetch(`/api/expenses/${id}/cancel`, { method: 'POST' });
+                        if (response.ok) {
+                            await this.loadExpenses();
+                            this.showNotification('Subscription cancelled successfully!', 'success');
+                        } else {
+                            const error = await response.json();
+                            this.showNotification(error.error || 'Error cancelling subscription', 'error');
+                        }
+                    } catch (error) {
+                        this.showNotification('Error cancelling subscription', 'error');
+                    }
+                },
+                
+                exportData(type) {
+                    const [year, month] = this.selectedMonth.split('-');
+                    const url = `/api/export/${type}?year=${year}&month=${month}`;
+                    window.location.href = url;
+                    this.showNotification(`${type.toUpperCase()} export started!`, 'success');
+                },
+                
+                showNotification(message, type = 'success') {
+                    this.notification = { show: true, message, type };
+                    setTimeout(() => {
+                        this.notification.show = false;
+                    }, 3000);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
