@@ -1,0 +1,49 @@
+# docker-compose.yml (Optional - for local Docker testing)
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://budgetuser:budgetpass@db:5432/budgetapp
+      - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
+      - EMAIL_SERVICE=${EMAIL_SERVICE:-sendgrid}
+      - SENDER_EMAIL=${SENDER_EMAIL}
+      - EMAIL_API_KEY=${EMAIL_API_KEY}
+    depends_on:
+      - db
+    volumes:
+      - ./instance:/app/instance
+    restart: unless-stopped
+
+  db:
+    image: postgres:14
+    environment:
+      - POSTGRES_USER=budgetuser
+      - POSTGRES_PASSWORD=budgetpass
+      - POSTGRES_DB=budgetapp
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  scheduler:
+    build: .
+    command: python email_scheduler.py
+    environment:
+      - DATABASE_URL=postgresql://budgetuser:budgetpass@db:5432/budgetapp
+      - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
+      - EMAIL_SERVICE=${EMAIL_SERVICE:-sendgrid}
+      - SENDER_EMAIL=${SENDER_EMAIL}
+      - EMAIL_API_KEY=${EMAIL_API_KEY}
+      - RECIPIENT_EMAIL=${RECIPIENT_EMAIL}
+    depends_on:
+      - db
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+

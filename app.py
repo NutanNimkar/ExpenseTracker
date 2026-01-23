@@ -53,16 +53,24 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
+    email_notifications_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    notification_email = db.Column(db.String(120), nullable=True)  # Custom email for notifications (defaults to registered email)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+    
+    def get_notification_email(self):
+        """Get the email address to use for notifications"""
+        return self.notification_email if self.notification_email else self.email
     
     def to_dict(self):
         return {
             'id': self.id,
             'username': self.username,
             'email': self.email,
+            'email_notifications_enabled': self.email_notifications_enabled,
+            'notification_email': self.notification_email,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S')
         }
 
@@ -528,6 +536,15 @@ def send_budget_email_api():
         recipient_email = data.get('email')
         month = data.get('month')  # Format: YYYY-MM
         
+        # If no email provided, use user's notification email preference
+        if not recipient_email:
+            user_id = get_current_user_id()
+            user = User.query.get(user_id)
+            if user:
+                recipient_email = user.get_notification_email()
+            else:
+                return jsonify({'error': 'Email address required'}), 400
+        
         if not recipient_email:
             return jsonify({'error': 'Email address required'}), 400
         
@@ -654,6 +671,65 @@ def send_test_email_api():
         return jsonify({'error': f'Failed to send email: {str(e)}'}), 500
 
 
+@app.route('/api/user/email-preferences', methods=['GET'])
+@login_required
+def get_email_preferences():
+    """Get user's email notification preferences"""
+    try:
+        user_id = get_current_user_id()
+        user = User.query.get(user_id)
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        return jsonify({
+            'success': True,
+            'email_notifications_enabled': user.email_notifications_enabled,
+            'notification_email': user.notification_email,
+            'registered_email': user.email
+        })
+    except Exception as e:
+        return jsonify({'error': f'Failed to get preferences: {str(e)}'}), 500
+
+
+@app.route('/api/user/email-preferences', methods=['POST'])
+@login_required
+def update_email_preferences():
+    """Update user's email notification preferences"""
+    try:
+        user_id = get_current_user_id()
+        user = User.query.get(user_id)
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        data = request.json
+        email_notifications_enabled = data.get('email_notifications_enabled', False)
+        notification_email = data.get('notification_email', '').strip()
+        
+        # If notification_email is empty, set to None (will use registered email)
+        if not notification_email:
+            notification_email = None
+        
+        # Validate email if provided
+        if notification_email and '@' not in notification_email:
+            return jsonify({'error': 'Invalid email address'}), 400
+        
+        user.email_notifications_enabled = email_notifications_enabled
+        user.notification_email = notification_email
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Email preferences updated successfully',
+            'email_notifications_enabled': user.email_notifications_enabled,
+            'notification_email': user.notification_email
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to update preferences: {str(e)}'}), 500
+
+
 def migrate_database():
     """Add is_recurring, is_active, is_bill, and user_id columns if they don't exist"""
     try:
@@ -698,6 +774,21 @@ def migrate_database():
                 # Column doesn't exist, add it
                 conn.execute(db.text('ALTER TABLE expense ADD COLUMN subcategory VARCHAR(100)'))
                 print("✓ Added subcategory column to expense table")
+            
+            # Check user table for email notification columns
+            try:
+                result = conn.execute(db.text("PRAGMA table_info(user)"))
+                user_columns = [row[1] for row in result.fetchall()]
+                
+                if 'email_notifications_enabled' not in user_columns:
+                    conn.execute(db.text('ALTER TABLE user ADD COLUMN email_notifications_enabled INTEGER DEFAULT 0'))
+                    print("✓ Added email_notifications_enabled column to user table")
+                
+                if 'notification_email' not in user_columns:
+                    conn.execute(db.text('ALTER TABLE user ADD COLUMN notification_email VARCHAR(120)'))
+                    print("✓ Added notification_email column to user table")
+            except Exception as e:
+                print(f"User table email columns check: {e}")
             
             # Check budget_limit table
             try:
@@ -751,5 +842,7 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         migrate_database()
-    app.run(debug=True, host='127.0.0.1', port=5000)
+    # Only run in debug mode if explicitly set in environment
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(debug=debug_mode, host='127.0.0.1', port=5000)
 

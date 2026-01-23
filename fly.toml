@@ -1,0 +1,33 @@
+# Fly.io configuration for free deployment
+app = "budget-app"  # Change to your app name
+primary_region = "iad"  # Choose closest region: iad, ord, dfw, sea, sjc, lax
+
+[build]
+
+[http_service]
+  internal_port = 5000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[services]]
+  processes = ["app"]
+  http_checks = []
+  internal_port = 5000
+  protocol = "tcp"
+
+[[processes]]
+  name = "app"
+  command = "gunicorn app:app"
+
+[[processes]]
+  name = "scheduler"
+  command = "python email_scheduler.py"
+
+# Persistent volume for SQLite database (free tier: 3GB)
+# This ensures your SQLite file persists across restarts
+[[mounts]]
+  source = "budget_data"
+  destination = "/app/instance"
+
